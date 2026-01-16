@@ -16,38 +16,26 @@ class Mortgage:
     principal: float
     interest_rate: float
     term_years: int
-    offset_balance: float = 0.0
-
-    def calculate_annual_payment(self):
-        # Standard Amortization Formula
+    
+    def __post_init__(self):
+        # Calculate FIXED annual payment once (standard P&I)
         r = self.interest_rate
         n = self.term_years
-        if r == 0: return self.principal / n
-        numerator = r * (1 + r)**n
-        denominator = (1 + r)**n - 1
-        return self.principal * (numerator / denominator)
+        self.annual_payment = self.principal * (r * (1 + r)**n) / ((1 + r)**n - 1)
 
     def pay_year(self):
-        """Returns (interest_paid, principal_paid, total_payment)"""
         if self.principal <= 0:
             return 0, 0, 0
             
-        annual_payment = self.calculate_annual_payment()
+        interest_for_year = self.principal * self.interest_rate
+        principal_for_year = self.annual_payment - interest_for_year
         
-        # Interest is calculated on (Principal - Offset)
-        effective_principal = max(0, self.principal - self.offset_balance)
-        interest_component = effective_principal * self.interest_rate
-        
-        # The rest goes to principal
-        principal_component = annual_payment - interest_component
-        
-        # Handle end of loan logic
-        if principal_component > self.principal:
-            principal_component = self.principal
-            annual_payment = interest_component + principal_component
-
-        self.principal -= principal_component
-        return interest_component, principal_component, annual_payment
+        # Prevent negative balance
+        if principal_for_year > self.principal:
+            principal_for_year = self.principal
+            
+        self.principal -= principal_for_year
+        return interest_for_year, principal_for_year, self.annual_payment
 
 # --- 3. BASE CLASS ---
 class Investment(ABC):
@@ -108,45 +96,36 @@ class LeveragedProperty(Investment):
         return appreciation
 
     def apply_costs(self):
-        # 1. Calculate Rent (Rent grows with asset value)
-        rental_income = self.value * self.rental_yield
-        
-        # 2. Expenses (Expenses grow with inflation)
-        # We assume expenses increase by inflation relative to the *start* of the sim, 
-        # or simplify and just inflate current expenses. Let's inflate current.
-        self.expenses *= (1 + self.config.inflation_rate)
-        
-        # 3. Mortgage
-        interest, principal, mortgage_payment = self.mortgage.pay_year()
-        
-        # 4. Tax Logic (Negative Gearing)
-        # Taxable Loss = Rent - Interest - Expenses (Principal is NOT tax deductible)
-        taxable_income = rental_income - interest - self.expenses
-        
-        tax_refund = 0
-        tax_paid = 0
-        
-        if taxable_income < 0:
-            # We lost money on paper -> Get tax refund
-            tax_refund = abs(taxable_income) * self.config.marginal_tax_rate
-        else:
-            # We made profit -> Pay tax
-            tax_paid = taxable_income * self.config.marginal_tax_rate
+            # 1. Rent (4% yield on CURRENT value)
+            rental_income = self.value * self.rental_yield
+            
+            # 2. Mortgage Step
+            interest, principal_paid, total_mortgage_payment = self.mortgage.pay_year()
 
-        # 5. Cash Flow Calculation
-        # Actual cash in/out = Rent + Refund - Expenses - MortgagePayment - TaxPaid
-        net_cash_flow = rental_income + tax_refund - self.expenses - mortgage_payment - tax_paid
+            self.total_mortgage_payment = total_mortgage_payment
+            
+            # 3. Expenses (Maintenance/Rates)
+            # Assuming expenses are approx 1% of property value per year
+            current_expenses = self.expenses * (1 + self.config.inflation_rate)
+            self.expenses = current_expenses 
+            
+            # 4. Taxable Position (For Negative Gearing)
+            taxable_profit_loss = rental_income - interest - current_expenses
+            
+            tax_impact = 0
+            if taxable_profit_loss < 0:
+                # Tax Refund (Negative Gearing)
+                tax_impact = abs(taxable_profit_loss) * self.config.marginal_tax_rate
+            else:
+                # Tax Paid on Profit
+                tax_impact = -(taxable_profit_loss * self.config.marginal_tax_rate)
 
-        # 6. Handling the Cash Flow
-        if net_cash_flow > 0:
-            # POSITIVE: Put it in the offset account to save interest next year
-            self.mortgage.offset_balance += net_cash_flow
-            out_of_pocket = 0
-        else:
-            # NEGATIVE: The investor had to pay this from their salary
-            out_of_pocket = abs(net_cash_flow)
-
-        # Recalculate Equity (Asset + Offset - Debt)
-        self.equity = self.value + self.mortgage.offset_balance - self.mortgage.principal
-        
-        return out_of_pocket  # This is the number needed for the ETF comparison
+            # 5. Net Cash Flow
+            # (Income + Refund) - (Mortgage + Expenses)
+            net_cash_flow = (rental_income + tax_impact) - (total_mortgage_payment + current_expenses)
+            
+            # 6. Update Equity: Current Value minus what is left on the loan
+            self.equity = self.value - self.mortgage.principal
+            
+            # Return out_of_pocket (only the negative part)
+            return abs(net_cash_flow) if net_cash_flow < 0 else 0
