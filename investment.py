@@ -1,6 +1,36 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+@dataclass
+class SimulationConfig:
+    inflation_rate: float = 0.03
+    tax_rate: float = 0.30
+    duration_years: int = 30
+
+@dataclass
+class Mortgage:
+    principal: float
+    interest_rate: float
+    term_years: int
+
+    def calculate_annual_payment(self):
+        # standard amortization formula (M = P [ i(1 + i)^n ] / [ (1 + i)^n – 1])
+        # simplified annual view
+        r = self.interest_rate
+        n = self.term_years
+        if r == 0: return self.principal / n
+        numerator = r * (1 + r)**n
+        denominator = (1 + r)**n - 1
+        return self.principal * (numerator / denominator)
+
+    def pay_year(self):
+        """
+        Returns:
+            tuple(float, float, float): (interest_paid, principal_paid, total_payment)
+        """
+        if self.principal <= 0:
+            return 0, 0, 0
+
 class Investment(ABC):
     def __init__(self, name: str, initial_value: float):
         self.name = name
