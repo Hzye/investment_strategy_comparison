@@ -36,3 +36,24 @@ class ETFInvestment(Investment):
         self.value -= cost
         return cost
 
+class PropertyInvestment(Investment):
+    def __init__(self, name, price, growth_rate, rental_yield, maintenance_cost):
+        super().__init__(name, price)
+        self.growth_rate = growth_rate
+        self.rental_yield = rental_yield
+        self.maintenance = maintenance_cost
+        # property specific state
+        self.cash_account = 0
+
+    def calculate_annual_return(self):
+        appreciation = self.value *self.growth_rate
+        self.value += appreciation
+
+        # rental inc
+        rent = self.value * self.rental_yield
+        self.cash_account += rent
+        return appreciation + rent
+
+    def apply_costs(self):
+        self.cash_account -= self.maintenance
+        return self.maintenance
