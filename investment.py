@@ -61,22 +61,21 @@ class Investment(ABC):
         self.history.append({"year": year, "value": self.value})
 
 class ETFInvestment(Investment):
-    def __init__(self, name, initial_value, annual_return_rate, mer_fee):
-        super().__init__(name, initial_value)
-        self.rate = annual_return_rate
-        self.mer_fee = mer_fee
+    def __init__(self, name, initial_cash, annual_return, mer_fee):
+        super().__init__(name, initial_cash)
+        self.rate = annual_return
+        self.mer = mer_fee
 
-    def calculate_annual_return(self):
-        # standard compounds interest
-        growth = self.value * self.rate
-        self.value += growth
-        return growth
+    def invest_cash(self, amount):
+        """Add the 'opportunity cost' money here."""
+        self.value += amount
 
-    def apply_costs(self):
-        # management expense ratio (MER)
-        cost = self.value *self.mer_fee
-        self.value -= cost
-        return cost
+    def calculate_year_financials(self):
+        gross_growth = self.value * self.rate
+        fee = self.value * self.mer
+        net_growth = gross_growth - fee
+        self.value += net_growth
+        return net_growth
 
 class LeveragedProperty(Investment):
     def __init__(self, name, purchase_price, growth_rate, rental_yield, expenses, mortgage: Mortgage):
