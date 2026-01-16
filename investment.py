@@ -31,6 +31,18 @@ class Mortgage:
         if self.principal <= 0:
             return 0, 0, 0
 
+        annual_payment = self.calculate_annual_payment()
+        interest_component = self.principal * self.interest_rate
+        
+        # Ensure we don't overpay the last chunk
+        principal_component = annual_payment - interest_component
+        if principal_component > self.principal:
+            principal_component = self.principal
+            annual_payment = interest_component + principal_component
+
+        self.principal -= principal_component
+        return interest_component, principal_component, annual_payment
+
 class Investment(ABC):
     def __init__(self, name: str, initial_value: float):
         self.name = name
@@ -66,24 +78,37 @@ class ETFInvestment(Investment):
         self.value -= cost
         return cost
 
-class PropertyInvestment(Investment):
-    def __init__(self, name, price, growth_rate, rental_yield, maintenance_cost):
-        super().__init__(name, price)
+class LeveragedProperty(Investment):
+    def __init__(self, name, purchase_price, growth_rate, rental_yield, expenses, mortgage: Mortgage):
+        super().__init__(name, purchase_price) # Initial value is full asset price
         self.growth_rate = growth_rate
         self.rental_yield = rental_yield
-        self.maintenance = maintenance_cost
-        # property specific state
-        self.cash_account = 0
-
-    def calculate_annual_return(self):
-        appreciation = self.value *self.growth_rate
+        self.expenses = expenses
+        self.mortgage = mortgage
+        self.equity = purchase_price - mortgage.principal # Track actual equity
+        
+    def calculate_year_financials(self):
+        # 1. Asset Growth
+        appreciation = self.value * self.growth_rate
         self.value += appreciation
-
-        # rental inc
-        rent = self.value * self.rental_yield
-        self.cash_account += rent
-        return appreciation + rent
-
-    def apply_costs(self):
-        self.cash_account -= self.maintenance
-        return self.maintenance
+        
+        # 2. Income (Rent)
+        rental_income = self.value * self.rental_yield
+        
+        # 3. Outflows (Expenses + Mortgage)
+        interest, principal, mortgage_payment = self.mortgage.pay_year()
+        total_outflow = self.expenses + mortgage_payment
+        
+        # 4. Net Position (Cashflow)
+        # If negative, this is what you paid "out of pocket"
+        net_cash_flow = rental_income - total_outflow
+        
+        # Update Equity (Value - Remaining Debt)
+        self.equity = self.value - self.mortgage.principal
+        
+        return {
+            'net_cash_flow': net_cash_flow,
+            'interest_paid': interest,
+            'principal_paid': principal,
+            'appreciation': appreciation
+        }
