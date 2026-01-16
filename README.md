@@ -1,2 +1,2 @@
 # investment_strategy_comparison
-Comparing investments strategies - IP vs ETS.
+Comparing investments strategies - IP vs ETFs.
